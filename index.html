@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VLSM Calculator</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-dark: #4338ca;
+      --background: #1e293b;
+      --card-bg: #334155;
+      --border-color: #475569;
+      --text-color: #f1f5f9;
+      --highlight: #475569;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      background: var(--background);
+      color: var(--text-color);
+    }
+
+    h1 {
+      color: var(--primary);
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+
+    input, button {
+      padding: 12px;
+      margin-bottom: 10px;
+      width: 100%;
+      font-size: 16px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-sizing: border-box;
+      background: #1e293b;
+      color: var(--text-color);
+    }
+
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: var(--primary-dark);
+    }
+
+    .result {
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+      margin-top: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    th {
+      background: var(--primary);
+      color: white;
+      padding: 12px;
+    }
+
+    td {
+      padding: 12px;
+      text-align: center;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    tr:nth-child(even) td {
+      background-color: #475569;
+    }
+
+    tr:hover td {
+      background-color: var(--highlight);
+    }
+
+    @media (max-width: 600px) {
+      table, thead, tbody, th, td, tr {
+        display: block;
+      }
+      th, td {
+        text-align: left;
+        padding: 10px;
+      }
+      th {
+        background: var(--primary);
+        color: white;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>VLSM Calculator</h1>
+  <label>Base IP Address (e.g. 192.168.1.0):</label>
+  <input type="text" id="ip" placeholder="192.168.1.0">
+
+  <label>Default Subnet Mask (CIDR, e.g. 24):</label>
+  <input type="number" id="cidr" placeholder="24">
+
+  <label>Host Requirements (comma separated):</label>
+  <input type="text" id="hosts" placeholder="100,50,25">
+
+  <button onclick="calculateVLSM()">Calculate VLSM</button>
+
+  <div class="result" id="result"></div>
+
+  <script>
+    function toIp(int) {
+      return [(int >>> 24) & 255, (int >>> 16) & 255, (int >>> 8) & 255, int & 255].join('.');
+    }
+
+    function calculateVLSM() {
+      const ipInput = document.getElementById('ip').value;
+      const cidr = parseInt(document.getElementById('cidr').value);
+      const hostsInput = document.getElementById('hosts').value;
+      const resultDiv = document.getElementById('result');
+
+      const hosts = hostsInput.split(',').map(x => parseInt(x.trim())).sort((a, b) => b - a);
+      if (hosts.some(isNaN)) {
+        resultDiv.innerHTML = '<p style="color:red">Please enter valid host numbers.</p>';
+        return;
+      }
+
+      const [a, b, c, d] = ipInput.split('.').map(Number);
+      if ([a, b, c, d].some(n => isNaN(n) || n < 0 || n > 255)) {
+        resultDiv.innerHTML = '<p style="color:red">Invalid IP address format.</p>';
+        return;
+      }
+
+      let currentIp = (a << 24) | (b << 16) | (c << 8) | d;
+      const maxHosts = 2 ** (32 - cidr);
+      const baseEndIp = currentIp + maxHosts;
+
+      let table = `<table><thead><tr>
+        <th>Subnet</th>
+        <th>Required Hosts</th>
+        <th>CIDR</th>
+        <th>Subnet Mask</th>
+        <th>Network Address</th>
+        <th>Broadcast Address</th>
+        <th>Usable IP Range</th>
+      </tr></thead><tbody>`;
+
+      let subnetCount = 1;
+      for (let h of hosts) {
+        const total = h + 2; // include net and broadcast
+        const bits = Math.ceil(Math.log2(total));
+        const blockSize = 2 ** bits;
+        const prefix = 32 - bits;
+
+        const subnetMask = 0xffffffff << (32 - prefix);
+        const maskIp = toIp(subnetMask);
+
+        const networkIp = currentIp;
+        const broadcastIp = currentIp + blockSize - 1;
+        const firstHost = networkIp + 1;
+        const lastHost = broadcastIp - 1;
+
+        if (broadcastIp >= baseEndIp) {
+          table += `<tr><td colspan="7" style="color:red; font-weight:bold;">Error: Not enough IP space left for subnet ${subnetCount}</td></tr>`;
+          break;
+        }
+
+        table += `<tr>
+          <td>Subnet ${subnetCount}</td>
+          <td>${h}</td>
+          <td>/${prefix}</td>
+          <td>${maskIp}</td>
+          <td>${toIp(networkIp)}</td>
+          <td>${toIp(broadcastIp)}</td>
+          <td>${toIp(firstHost)} - ${toIp(lastHost)}</td>
+        </tr>`;
+
+        currentIp += blockSize;
+        subnetCount++;
+      }
+
+      table += '</tbody></table>';
+      resultDiv.innerHTML = table;
+    }
+  </script>
+</body>
+</html>
