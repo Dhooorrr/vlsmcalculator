@@ -96,6 +96,13 @@
       background-color: var(--highlight);
     }
 
+    .footer {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 14px;
+      margin-top: 40px;
+    }
+
     @media (max-width: 600px) {
       table, thead, tbody, th, td, tr {
         display: block;
@@ -126,7 +133,14 @@
 
   <div class="result" id="result"></div>
 
+  <div class="footer">
+    &copy; <span id="year"></span> VLSM Calculator by Dhooo
+  </div>
+
   <script>
+    // Copyright logic
+    document.getElementById('year').textContent = new Date().getFullYear();
+
     function toIp(int) {
       return [(int >>> 24) & 255, (int >>> 16) & 255, (int >>> 8) & 255, int & 255].join('.');
     }
@@ -165,7 +179,7 @@
 
       let subnetCount = 1;
       for (let h of hosts) {
-        const total = h + 2; // include net and broadcast
+        const total = h + 2;
         const bits = Math.ceil(Math.log2(total));
         const blockSize = 2 ** bits;
         const prefix = 32 - bits;
